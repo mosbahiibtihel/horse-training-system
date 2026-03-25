@@ -1,0 +1,6 @@
+@HorseTraining.API_HostAddress = http://localhost:5231
+
+GET {{HorseTraining.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
