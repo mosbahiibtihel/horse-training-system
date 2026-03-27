@@ -1,0 +1,18 @@
+export const tokens = {
+  bg: '#F8F7F4',
+  sidebar: '#0F0F0F',
+  card: '#FFFFFF',
+  accent: '#C9A96E',
+  accentLight: '#F5EFE4',
+  textPrimary: '#1A1A1A',
+  textMuted: '#9A9A9A',
+  textLight: '#C4C4C4',
+  border: '#EBEBEB',
+  danger: '#E5534B',
+  dangerLight: '#FDF2F1',
+  success: '#3DAA6E',
+  successLight: '#EDF7F2',
+  radius: '12px',
+  radiusSm: '8px',
+  shadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)',
+};

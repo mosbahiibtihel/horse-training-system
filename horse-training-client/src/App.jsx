@@ -2,12 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import DashboardPage from './pages/DashboardPage';
 import PrivateRoute from './components/PrivateRoute';
-
-function Dashboard() {
-  return <h2 style={{ padding: '2rem' }}>Dashboard coming soon...</h2>;
-}
-
+import HorsesPage from './pages/HorsesPage';
+import TrainingSessionsPage from './pages/TrainingSessionsPage';
 export default function App() {
   return (
     <AuthProvider>
@@ -16,9 +14,16 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/dashboard" element={
-            <PrivateRoute><Dashboard /></PrivateRoute>
+            <PrivateRoute><DashboardPage /></PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/login" />} />
+          <Route path="/horses" element={
+  <PrivateRoute><HorsesPage /></PrivateRoute>}/>
+  
+  <Route path="/sessions" element={
+  <PrivateRoute><TrainingSessionsPage /></PrivateRoute>
+} />
+
         </Routes>
       </BrowserRouter>
     </AuthProvider>
