@@ -1,7 +1,9 @@
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { tokens as t } from '../styles/tokens';
-
+// eslint-disable-next-line no-unused-vars
+import { useNotifications } from '../hooks/useNotifications';
+import NotificationBell from './NotificationBell';
 const navItems = [
   { path: '/dashboard', icon: '▤', label: 'Dashboard' },
   { path: '/horses', icon: '◈', label: 'Horses' },
@@ -15,7 +17,7 @@ export default function Layout({ children }) {
   const location = useLocation();
 
   const handleLogout = () => { logout(); navigate('/login'); };
-
+const { notifications, unreadCount, markAllRead } = useNotifications();
   return (
     <div style={s.shell}>
       <aside style={s.sidebar}>
@@ -50,6 +52,13 @@ export default function Layout({ children }) {
             <div style={s.userName}>{user?.fullName}</div>
             <div style={s.userRole}>{user?.role}</div>
           </div>
+
+  <NotificationBell
+    notifications={notifications}
+    unreadCount={unreadCount}
+    markAllRead={markAllRead}
+  />
+
           <button style={s.logoutBtn} onClick={handleLogout}
             title="Sign out">→</button>
         </div>

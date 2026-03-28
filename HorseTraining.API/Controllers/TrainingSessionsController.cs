@@ -1,5 +1,6 @@
 ﻿namespace HorseTraining.API.Controllers;
 
+using HorseTraining.API.Services;
 using HorseTraining.Application.DTOs;
 using HorseTraining.Domain.Entities;
 using HorseTraining.Domain.Enums;
@@ -16,9 +17,14 @@ public class TrainingSessionsController : ControllerBase
 {
     private readonly AppDbContext _context;
 
-    public TrainingSessionsController(AppDbContext context)
+    private readonly NotificationService _notificationService;
+
+   
+
+    public TrainingSessionsController(AppDbContext context, NotificationService notificationService)
     {
         _context = context;
+        _notificationService = notificationService;
     }
 
     [HttpGet]
@@ -133,11 +139,22 @@ public class TrainingSessionsController : ControllerBase
     [HttpPost("{id}/feedback")]
     public async Task<IActionResult> AddFeedback(int id, AddFeedbackDto dto)
     {
-        var session = await _context.TrainingSessions.FindAsync(id);
+        var session = await _context.TrainingSessions
+            .Include(s => s.Horse)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
         if (session == null) return NotFound();
 
         session.TrainerFeedback = dto.TrainerFeedback;
         await _context.SaveChangesAsync();
+
+        // Fire real-time notification to the rider
+        await _notificationService.SendToUser(
+            session.RiderId.ToString(),
+            "feedback",
+            $"Your trainer left feedback on {session.Horse.Name}'s {session.SessionType} session."
+        );
+
         return NoContent();
     }
 
@@ -151,4 +168,9 @@ public class TrainingSessionsController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+
+
+   
+
 }
