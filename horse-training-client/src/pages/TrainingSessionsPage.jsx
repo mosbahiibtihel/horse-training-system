@@ -1,744 +1,463 @@
-// src/pages/TrainingSessionsPage.jsx
 import { useState, useEffect } from 'react';
+import Layout from '../components/Layout';
 import api from '../api/axios';
 import { tokens as t } from '../styles/tokens';
+import { useAuth } from '../context/AuthContext';
+
+const SESSION_TYPES = [
+  'Flatwork','JumpTraining','Dressage',
+  'Endurance','Recovery','Groundwork','Hacking'
+];
+
+const emptyForm = {
+  date: new Date().toISOString().slice(0,16),
+  sessionType: 'Flatwork',
+  durationMinutes: 60,
+  intensity: 5,
+  notes: '',
+  horseId: ''
+};
+
+const intensityColor = (v) => {
+  if (v <= 3) return '#3DAA6E';
+  if (v <= 6) return '#C9A96E';
+  if (v <= 8) return '#E08C3A';
+  return '#E5534B';
+};
+
+const intensityLabel = (v) => {
+  const map = {
+    1:'Very light',2:'Light',3:'Light moderate',
+    4:'Moderate',5:'Moderate hard',6:'Hard',
+    7:'Very hard',8:'Intense',9:'Very intense',10:'Maximum'
+  };
+  return map[v] || `${v}/10`;
+};
 
 export default function TrainingSessionsPage() {
+  const { user } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [horses, setHorses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [activeTab, setActiveTab] = useState('history');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [editingSession, setEditingSession] = useState(null);
-  const [userRole, setUserRole] = useState('');
   const [filter, setFilter] = useState({ horseId: '', fromDate: '', toDate: '' });
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().slice(0, 16),
-    sessionType: 'Flatwork',
-    durationMinutes: 60,
-    intensity: 'Moderate',
-    notes: '',
-    horseId: '',
-    trainerFeedback: ''
-  });
-
-  const sessionTypes = ['Flatwork', 'Jumping', 'Dressage', 'CrossCountry', 'Lunging', 'Hacking', 'Groundwork', 'Recovery'];
-  const intensityLevels = ['VeryLow', 'Low', 'Moderate', 'High', 'VeryHigh'];
 
   useEffect(() => {
-    const role = localStorage.getItem('userRole');
-    setUserRole(role || '');
     fetchHorses();
     fetchSessions();
   }, []);
 
   const fetchHorses = async () => {
     try {
-      const response = await api.get('/horses');
-      setHorses(response.data);
-    } catch (err) {
-      console.error('Error fetching horses:', err);
-    }
+      const res = await api.get('/horses');
+      setHorses(res.data);
+    } catch { /* empty */ }
   };
 
   const fetchSessions = async () => {
     try {
       setLoading(true);
-      let url = '/trainingsessions';
-      const params = [];
-      if (filter.horseId) params.push(`horseId=${filter.horseId}`);
-      if (filter.fromDate) params.push(`fromDate=${filter.fromDate}`);
-      if (filter.toDate) params.push(`toDate=${filter.toDate}`);
-      if (params.length) url += `?${params.join('&')}`;
-      
-      const response = await api.get(url);
-      setSessions(response.data);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch sessions');
-    } finally {
-      setLoading(false);
-    }
+      const params = new URLSearchParams();
+      if (filter.horseId) params.append('horseId', filter.horseId);
+      if (filter.fromDate) params.append('fromDate', filter.fromDate);
+      if (filter.toDate) params.append('toDate', filter.toDate);
+      const res = await api.get(`/trainingsessions?${params}`);
+      setSessions(res.data);
+    } catch { setError('Failed to load sessions.'); }
+    finally { setLoading(false); }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(''); setSuccess('');
     try {
-      setError('');
-      setSuccess('');
-      
-      const sessionData = {
-        date: formData.date,
-        sessionType: formData.sessionType,
-        durationMinutes: parseInt(formData.durationMinutes),
-        intensity: formData.intensity,
-        notes: formData.notes,
-        horseId: parseInt(formData.horseId)
+      const payload = { ...form,
+        durationMinutes: parseInt(form.durationMinutes),
+        intensity: parseInt(form.intensity),
+        horseId: parseInt(form.horseId)
       };
-      
-      if (editingSession) {
-        await api.put(`/trainingsessions/${editingSession.id}`, {
-          ...sessionData,
-          trainerFeedback: formData.trainerFeedback
-        });
-        setSuccess('Session updated successfully!');
-      } else {
-        await api.post('/trainingsessions', sessionData);
-        setSuccess('Training session logged successfully!');
-      }
-      
-      resetForm();
+      if (editId) await api.put(`/trainingsessions/${editId}`, payload);
+      else await api.post('/trainingsessions', payload);
+      setSuccess(editId ? 'Session updated.' : 'Session logged.');
+      setShowForm(false); setForm(emptyForm); setEditId(null);
       fetchSessions();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save session');
-    }
+    } catch { setError('Failed to save session.'); }
   };
 
-  const handleAddFeedback = async (sessionId, feedback) => {
-    try {
-      await api.post(`/trainingsessions/${sessionId}/feedback`, {
-        trainerFeedback: feedback
-      });
-      setSuccess('Feedback added successfully!');
-      fetchSessions();
-    // eslint-disable-next-line no-unused-vars
-    } catch (err) {
-      setError('Failed to add feedback');
-    }
+  const handleEdit = (s) => {
+    setForm({
+      date: s.date.slice(0,16), sessionType: s.sessionType,
+      durationMinutes: s.durationMinutes, intensity: s.intensity,
+      notes: s.notes || '', horseId: s.horseId
+    });
+    setEditId(s.id); setShowForm(true);
+    setActiveTab('history');
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this training session?')) {
-      try {
-        await api.delete(`/trainingsessions/${id}`);
-        setSuccess('Session deleted successfully!');
-        fetchSessions();
-      // eslint-disable-next-line no-unused-vars
-      } catch (err) {
-        setError('Failed to delete session');
-      }
-    }
+    if (!window.confirm('Delete this session?')) return;
+    try {
+      await api.delete(`/trainingsessions/${id}`);
+      setSuccess('Session deleted.');
+      fetchSessions();
+    } catch { setError('Failed to delete.'); }
   };
 
-  const handleEdit = (session) => {
-    setEditingSession(session);
-    setFormData({
-      date: session.date.slice(0, 16),
-      sessionType: session.sessionType,
-      durationMinutes: session.durationMinutes,
-      intensity: session.intensity,
-      notes: session.notes || '',
-      horseId: session.horseId,
-      trainerFeedback: session.trainerFeedback || ''
-    });
-    setShowForm(true);
-  };
-
-  const resetForm = () => {
-    setEditingSession(null);
-    setShowForm(false);
-    setFormData({
-      date: new Date().toISOString().slice(0, 16),
-      sessionType: 'Flatwork',
-      durationMinutes: 60,
-      intensity: 'Moderate',
-      notes: '',
-      horseId: '',
-      trainerFeedback: ''
-    });
-  };
-
-  const getIntensityColor = (intensity) => {
-    const colors = {
-      VeryLow: '#A8E6CF',
-      Low: '#D4E6A8',
-      Moderate: '#FFD966',
-      High: '#FFB347',
-      VeryHigh: '#FF6B6B'
-    };
-    return colors[intensity] || t.textMuted;
-  };
-
-  const getIntensityLabel = (intensity) => {
-    const labels = {
-      VeryLow: '🟢 Very Low',
-      Low: '🟢 Low',
-      Moderate: '🟡 Moderate',
-      High: '🟠 High',
-      VeryHigh: '🔴 Very High'
-    };
-    return labels[intensity] || intensity;
+  const handleFeedback = async (id) => {
+    const feedback = window.prompt('Enter trainer feedback:');
+    if (!feedback) return;
+    try {
+      await api.post(`/trainingsessions/${id}/feedback`,
+        { trainerFeedback: feedback });
+      setSuccess('Feedback added.');
+      fetchSessions();
+    } catch { setError('Failed to add feedback.'); }
   };
 
   return (
-    <div style={s.page}>
-      {/* Header */}
-      <div style={s.header}>
+    <Layout>
+      <div style={s.topBar}>
         <div>
-          <h1 style={s.title}>Training Sessions</h1>
-          <p style={s.subtitle}>Log and track your training progress</p>
+          <h1 style={s.title}>Sessions</h1>
+          <p style={s.subtitle}>{sessions.length} session{sessions.length !== 1 ? 's' : ''} logged</p>
         </div>
-        {userRole === 'Rider' && (
-          <button style={s.primaryBtn} onClick={() => setShowForm(!showForm)}>
-            {showForm ? 'Cancel' : '+ Log Session'}
-          </button>
+        {user?.role === 'Rider' && (
+          <button style={s.addBtn} onClick={() => {
+            setShowForm(true); setEditId(null); setForm(emptyForm);
+          }}>+ Log session</button>
         )}
       </div>
 
-      {/* Messages */}
       {error && <div style={s.error}>{error}</div>}
-      {success && <div style={s.success}>{success}</div>}
+      {success && <div style={s.successMsg}>{success}</div>}
 
-      {/* Filters */}
-      <div style={s.filters}>
-        <select
-          style={s.filterSelect}
-          value={filter.horseId}
-          onChange={e => setFilter({...filter, horseId: e.target.value})}
-        >
-          <option value="">All Horses</option>
-          {horses.map(horse => (
-            <option key={horse.id} value={horse.id}>{horse.name}</option>
-          ))}
-        </select>
-        <input
-          type="date"
-          style={s.filterInput}
-          value={filter.fromDate}
-          onChange={e => setFilter({...filter, fromDate: e.target.value})}
-          placeholder="From Date"
-        />
-        <input
-          type="date"
-          style={s.filterInput}
-          value={filter.toDate}
-          onChange={e => setFilter({...filter, toDate: e.target.value})}
-          placeholder="To Date"
-        />
-        <button style={s.filterBtn} onClick={fetchSessions}>Apply Filters</button>
-        <button style={s.clearBtn} onClick={() => {
-          setFilter({ horseId: '', fromDate: '', toDate: '' });
-          setTimeout(fetchSessions, 100);
-        }}>Clear</button>
-      </div>
-
-      {/* Form */}
       {showForm && (
         <div style={s.formCard}>
-          <h3 style={s.formTitle}>
-            {editingSession ? 'Edit Training Session' : 'Log New Training Session'}
-          </h3>
-          <form onSubmit={handleSubmit} style={s.form}>
+          <div style={s.formHeader}>
+            <span style={s.formTitle}>
+              {editId ? 'Edit session' : 'Log new session'}
+            </span>
+            <button style={s.closeBtn}
+              onClick={() => { setShowForm(false); setEditId(null); }}>✕</button>
+          </div>
+          <form onSubmit={handleSubmit}>
             <div style={s.formGrid}>
               <div>
-                <label style={s.label}>Date & Time *</label>
-                <input
-                  style={s.input}
-                  type="datetime-local"
-                  value={formData.date}
-                  onChange={e => setFormData({...formData, date: e.target.value})}
-                  required
-                />
-              </div>
-              
-              <div>
-                <label style={s.label}>Horse *</label>
-                <select
-                  style={s.select}
-                  value={formData.horseId}
-                  onChange={e => setFormData({...formData, horseId: e.target.value})}
-                  required
-                >
+                <label style={s.label}>Horse</label>
+                <select style={s.input} value={form.horseId}
+                  onChange={e => setForm({...form, horseId: e.target.value})}
+                  required>
                   <option value="">Select a horse</option>
-                  {horses.map(horse => (
-                    <option key={horse.id} value={horse.id}>{horse.name}</option>
+                  {horses.map(h => (
+                    <option key={h.id} value={h.id}>{h.name}</option>
                   ))}
                 </select>
               </div>
-              
               <div>
-                <label style={s.label}>Session Type *</label>
-                <select
-                  style={s.select}
-                  value={formData.sessionType}
-                  onChange={e => setFormData({...formData, sessionType: e.target.value})}
-                  required
-                >
-                  {sessionTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
+                <label style={s.label}>Date & time</label>
+                <input style={s.input} type="datetime-local"
+                  value={form.date}
+                  onChange={e => setForm({...form, date: e.target.value})}
+                  required />
+              </div>
+              <div>
+                <label style={s.label}>Session type</label>
+                <select style={s.input} value={form.sessionType}
+                  onChange={e => setForm({...form, sessionType: e.target.value})}>
+                  {SESSION_TYPES.map(t => (
+                    <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </div>
-              
               <div>
-                <label style={s.label}>Duration (minutes) *</label>
-                <input
-                  style={s.input}
-                  type="number"
-                  min="1"
-                  max="480"
-                  value={formData.durationMinutes}
-                  onChange={e => setFormData({...formData, durationMinutes: e.target.value})}
-                  required
-                />
+                <label style={s.label}>Duration (minutes)</label>
+                <input style={s.input} type="number" min="5" max="480"
+                  value={form.durationMinutes}
+                  onChange={e => setForm({...form, durationMinutes: e.target.value})}
+                  required />
               </div>
-              
-              <div>
-                <label style={s.label}>Intensity *</label>
-                <select
-                  style={s.select}
-                  value={formData.intensity}
-                  onChange={e => setFormData({...formData, intensity: e.target.value})}
-                  required
-                >
-                  {intensityLevels.map(level => (
-                    <option key={level} value={level}>{getIntensityLabel(level)}</option>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={s.label}>
+                  Intensity — <span style={{ color: intensityColor(form.intensity), fontWeight: '500' }}>
+                    {form.intensity}/10 · {intensityLabel(form.intensity)}
+                  </span>
+                </label>
+                <input type="range" min="1" max="10"
+                  value={form.intensity} style={s.slider}
+                  onChange={e => setForm({...form, intensity: parseInt(e.target.value)})} />
+                <div style={s.sliderTrack}>
+                  {['1','2','3','4','5','6','7','8','9','10'].map(n => (
+                    <span key={n} style={s.sliderTick}>{n}</span>
                   ))}
-                </select>
-              </div>
-              
-              <div style={s.fullWidth}>
-                <label style={s.label}>Notes</label>
-                <textarea
-                  style={s.textarea}
-                  rows="3"
-                  placeholder="Describe the session, what went well, areas to improve..."
-                  value={formData.notes}
-                  onChange={e => setFormData({...formData, notes: e.target.value})}
-                />
-              </div>
-              
-              {userRole === 'Trainer' && editingSession && (
-                <div style={s.fullWidth}>
-                  <label style={s.label}>Trainer Feedback</label>
-                  <textarea
-                    style={s.textarea}
-                    rows="3"
-                    placeholder="Provide feedback to the rider..."
-                    value={formData.trainerFeedback}
-                    onChange={e => setFormData({...formData, trainerFeedback: e.target.value})}
-                  />
                 </div>
-              )}
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={s.label}>Notes</label>
+                <textarea style={s.textarea} rows="3"
+                  placeholder="What went well? Areas to improve..."
+                  value={form.notes}
+                  onChange={e => setForm({...form, notes: e.target.value})} />
+              </div>
             </div>
-            
             <div style={s.formActions}>
-              <button type="button" style={s.secondaryBtn} onClick={resetForm}>
-                Cancel
+              <button type="submit" style={s.saveBtn}>
+                {editId ? 'Update session' : 'Log session'}
               </button>
-              <button type="submit" style={s.primaryBtn}>
-                {editingSession ? 'Update Session' : 'Log Session'}
+              <button type="button" style={s.cancelBtn}
+                onClick={() => { setShowForm(false); setEditId(null); }}>
+                Cancel
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Sessions List */}
+      <div style={s.tabRow}>
+        {['history'].map(tab => (
+          <button key={tab} style={{
+            ...s.tab,
+            ...(activeTab === tab ? s.tabActive : {})
+          }} onClick={() => setActiveTab(tab)}>
+            History ({sessions.length})
+          </button>
+        ))}
+      </div>
+
+      <div style={s.filterRow}>
+        <select style={s.filterInput} value={filter.horseId}
+          onChange={e => setFilter({...filter, horseId: e.target.value})}>
+          <option value="">All horses</option>
+          {horses.map(h => (
+            <option key={h.id} value={h.id}>{h.name}</option>
+          ))}
+        </select>
+        <input type="date" style={s.filterInput} value={filter.fromDate}
+          onChange={e => setFilter({...filter, fromDate: e.target.value})} />
+        <input type="date" style={s.filterInput} value={filter.toDate}
+          onChange={e => setFilter({...filter, toDate: e.target.value})} />
+        <button style={s.filterBtn} onClick={fetchSessions}>Apply</button>
+        <button style={s.clearBtn} onClick={() => {
+          setFilter({ horseId: '', fromDate: '', toDate: '' });
+          fetchSessions();
+        }}>Clear</button>
+      </div>
+
       {loading ? (
-        <div style={s.empty}>Loading sessions...</div>
+        <div style={s.empty}>Loading...</div>
       ) : sessions.length === 0 ? (
-        <div style={s.emptyCard}>
-          <div style={s.emptyIcon}>🏋️</div>
-          <div style={s.emptyText}>No training sessions yet</div>
+        <div style={s.emptyState}>
+          <div style={s.emptyIcon}>◉</div>
+          <div style={s.emptyText}>No sessions yet</div>
           <div style={s.emptySubtext}>
-            {userRole === 'Rider' 
-              ? 'Click "Log Session" to start tracking your training'
-              : 'No sessions logged yet'}
+            {user?.role === 'Rider'
+              ? 'Click "Log session" to start tracking your training'
+              : 'No sessions have been logged yet'}
           </div>
         </div>
       ) : (
         <div style={s.list}>
           {sessions.map(session => (
-            <div key={session.id} style={s.sessionCard}>
-              <div style={s.cardHeader}>
-                <div style={s.cardTitle}>
-                  <h3 style={s.horseName}>{session.horseName}</h3>
-                  <span style={s.sessionBadge}>{session.sessionType}</span>
-                </div>
-                <div style={s.cardActions}>
-                  {userRole === 'Rider' && (
-                    <button style={s.editBtn} onClick={() => handleEdit(session)}>Edit</button>
-                  )}
-                  {userRole === 'Rider' && (
-                    <button style={s.deleteBtn} onClick={() => handleDelete(session.id)}>Delete</button>
-                  )}
-                  {userRole === 'Trainer' && !session.hasFeedback && (
-                    <button style={s.feedbackBtn} onClick={() => {
-                      const feedback = prompt('Enter feedback for this session:');
-                      if (feedback) handleAddFeedback(session.id, feedback);
-                    }}>Add Feedback</button>
-                  )}
+            <div key={session.id} style={s.card}>
+              <div style={s.cardLeft}>
+                <div style={s.cardDate}>
+                  <div style={s.cardDay}>
+                    {new Date(session.date).toLocaleDateString('en-US',{day:'2-digit'})}
+                  </div>
+                  <div style={s.cardMonth}>
+                    {new Date(session.date).toLocaleDateString('en-US',{month:'short'})}
+                  </div>
                 </div>
               </div>
-              
-              <div style={s.cardDetails}>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}>Date</span>
-                  <span style={s.detailValue}>
-                    {new Date(session.date).toLocaleDateString()}
-                  </span>
+
+              <div style={s.cardBody}>
+                <div style={s.cardTop}>
+                  <div style={s.cardMeta}>
+                    <span style={s.horseName}>{session.horseName}</span>
+                    <span style={s.dot}>·</span>
+                    <span style={s.sessionType}>{session.sessionType}</span>
+                  </div>
+                  <div style={s.cardActions}>
+                    {user?.role === 'Rider' && (
+                      <>
+                        <button style={s.editBtn}
+                          onClick={() => handleEdit(session)}>Edit</button>
+                        <button style={s.deleteBtn}
+                          onClick={() => handleDelete(session.id)}>Delete</button>
+                      </>
+                    )}
+                    {user?.role === 'Trainer' && !session.hasFeedback && (
+                      <button style={s.feedbackBtn}
+                        onClick={() => handleFeedback(session.id)}>
+                        Add feedback
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}>Duration</span>
-                  <span style={s.detailValue}>{session.durationMinutes} min</span>
+
+                <div style={s.cardStats}>
+                  <div style={s.stat}>
+                    <span style={s.statLabel}>Duration</span>
+                    <span style={s.statValue}>{session.durationMinutes} min</span>
+                  </div>
+                  <div style={s.stat}>
+                    <span style={s.statLabel}>Intensity</span>
+                    <span style={{
+                      ...s.intensityPill,
+                      backgroundColor: intensityColor(session.intensity) + '18',
+                      color: intensityColor(session.intensity)
+                    }}>
+                      {session.intensity}/10 · {intensityLabel(session.intensity)}
+                    </span>
+                  </div>
+                  <div style={s.stat}>
+                    <span style={s.statLabel}>Rider</span>
+                    <span style={s.statValue}>{session.riderName}</span>
+                  </div>
                 </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}>Intensity</span>
-                  <span style={{
-                    ...s.intensityBadge,
-                    backgroundColor: getIntensityColor(session.intensity) + '20',
-                    color: getIntensityColor(session.intensity)
-                  }}>
-                    {getIntensityLabel(session.intensity)}
-                  </span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}>Rider</span>
-                  <span style={s.detailValue}>{session.riderName}</span>
-                </div>
+
+                {session.notes && (
+                  <div style={s.notesBox}>
+                    <span style={s.notesLabel}>Notes</span>
+                    <p style={s.notesText}>{session.notes}</p>
+                  </div>
+                )}
+
+                {session.trainerFeedback && (
+                  <div style={s.feedbackBox}>
+                    <span style={s.feedbackLabel}>Trainer feedback</span>
+                    <p style={s.feedbackText}>{session.trainerFeedback}</p>
+                  </div>
+                )}
               </div>
-              
-              {session.notes && (
-                <div style={s.notes}>
-                  <span style={s.notesLabel}>📝 Notes:</span>
-                  <p style={s.notesText}>{session.notes}</p>
-                </div>
-              )}
-              
-              {session.trainerFeedback && (
-                <div style={s.feedback}>
-                  <span style={s.feedbackLabel}>💬 Trainer Feedback:</span>
-                  <p style={s.feedbackText}>{session.trainerFeedback}</p>
-                </div>
-              )}
             </div>
           ))}
         </div>
       )}
-    </div>
+    </Layout>
   );
 }
 
 const s = {
-  page: {
-    padding: '32px',
-    maxWidth: '1200px',
-    margin: '0 auto',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '32px',
-  },
-  title: {
-    margin: '0 0 4px',
-    fontSize: '22px',
-    fontWeight: '600',
-    color: t.textPrimary,
-  },
-  subtitle: {
-    margin: 0,
-    fontSize: '13px',
-    color: t.textMuted,
-  },
-  primaryBtn: {
-    backgroundColor: t.textPrimary,
-    color: '#fff',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: t.radiusSm,
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-  },
-  filters: {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '24px',
-    flexWrap: 'wrap',
-  },
-  filterSelect: {
-    padding: '8px 12px',
-    borderRadius: t.radiusSm,
-    border: `1px solid ${t.border}`,
-    fontSize: '13px',
-    backgroundColor: '#fff',
-  },
-  filterInput: {
-    padding: '8px 12px',
-    borderRadius: t.radiusSm,
-    border: `1px solid ${t.border}`,
-    fontSize: '13px',
-  },
-  filterBtn: {
-    padding: '8px 16px',
-    backgroundColor: t.accent,
-    color: '#fff',
-    border: 'none',
-    borderRadius: t.radiusSm,
-    cursor: 'pointer',
-  },
-  clearBtn: {
-    padding: '8px 16px',
-    backgroundColor: '#f5f5f5',
-    border: `1px solid ${t.border}`,
-    borderRadius: t.radiusSm,
-    cursor: 'pointer',
-  },
-  error: {
-    backgroundColor: t.dangerLight,
-    color: t.danger,
-    padding: '12px 16px',
-    borderRadius: t.radiusSm,
-    marginBottom: '20px',
-    fontSize: '13px',
-  },
-  success: {
-    backgroundColor: '#E8F5E9',
-    color: '#2E7D32',
-    padding: '12px 16px',
-    borderRadius: t.radiusSm,
-    marginBottom: '20px',
-    fontSize: '13px',
-  },
-  formCard: {
-    backgroundColor: t.card,
-    borderRadius: t.radius,
-    padding: '24px',
-    marginBottom: '32px',
-    boxShadow: t.shadow,
-  },
-  formTitle: {
-    margin: '0 0 20px',
-    fontSize: '16px',
-    fontWeight: '600',
-    color: t.textPrimary,
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  formGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '16px',
-  },
-  fullWidth: {
-    gridColumn: 'span 2',
-  },
-  label: {
-    display: 'block',
-    fontSize: '12px',
-    fontWeight: '500',
-    color: t.textPrimary,
-    marginBottom: '6px',
-  },
-  input: {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: t.radiusSm,
-    border: `1px solid ${t.border}`,
-    fontSize: '13px',
-    boxSizing: 'border-box',
-  },
-  select: {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: t.radiusSm,
-    border: `1px solid ${t.border}`,
-    fontSize: '13px',
-    backgroundColor: '#fff',
-  },
-  textarea: {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: t.radiusSm,
-    border: `1px solid ${t.border}`,
-    fontSize: '13px',
-    fontFamily: 'inherit',
-    resize: 'vertical',
-  },
-  formActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '12px',
-    marginTop: '8px',
-  },
-  secondaryBtn: {
-    backgroundColor: 'transparent',
-    color: t.textMuted,
-    border: `1px solid ${t.border}`,
-    padding: '10px 20px',
-    borderRadius: t.radiusSm,
-    fontSize: '13px',
-    cursor: 'pointer',
-  },
-  list: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  sessionCard: {
-    backgroundColor: t.card,
-    borderRadius: t.radius,
-    padding: '20px',
-    boxShadow: t.shadow,
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '16px',
-  },
-  cardTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    flexWrap: 'wrap',
-  },
-  horseName: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: '600',
-    color: t.textPrimary,
-  },
-  sessionBadge: {
-    backgroundColor: t.accentLight,
-    color: t.accent,
-    padding: '4px 12px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '500',
-  },
-  cardActions: {
-    display: 'flex',
-    gap: '8px',
-  },
-  editBtn: {
-    backgroundColor: 'transparent',
-    color: t.textMuted,
-    border: `1px solid ${t.border}`,
-    padding: '4px 12px',
-    borderRadius: t.radiusSm,
-    fontSize: '11px',
-    cursor: 'pointer',
-  },
-  deleteBtn: {
-    backgroundColor: 'transparent',
-    color: t.danger,
-    border: `1px solid ${t.danger}`,
-    padding: '4px 12px',
-    borderRadius: t.radiusSm,
-    fontSize: '11px',
-    cursor: 'pointer',
-  },
-  feedbackBtn: {
-    backgroundColor: t.accent,
-    color: '#fff',
-    border: 'none',
-    padding: '4px 12px',
-    borderRadius: t.radiusSm,
-    fontSize: '11px',
-    cursor: 'pointer',
-  },
-  cardDetails: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '16px',
-    marginBottom: '16px',
-    paddingBottom: '16px',
-    borderBottom: `1px solid ${t.border}`,
-  },
-  detailItem: {
-    textAlign: 'center',
-  },
-  detailLabel: {
-    display: 'block',
-    fontSize: '11px',
-    color: t.textMuted,
-    marginBottom: '4px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  detailValue: {
-    fontSize: '13px',
-    fontWeight: '500',
-    color: t.textPrimary,
-  },
-  intensityBadge: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: '12px',
-    fontSize: '11px',
-    fontWeight: '500',
-  },
-  notes: {
-    marginTop: '12px',
-    padding: '12px',
-    backgroundColor: '#f9f9f9',
-    borderRadius: t.radiusSm,
-  },
-  notesLabel: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: t.textMuted,
-    display: 'block',
-    marginBottom: '6px',
-  },
-  notesText: {
-    margin: 0,
-    fontSize: '13px',
-    color: t.textPrimary,
-    lineHeight: '1.5',
-  },
-  feedback: {
-    marginTop: '12px',
-    padding: '12px',
-    backgroundColor: t.accentLight + '20',
-    borderRadius: t.radiusSm,
-    borderLeft: `3px solid ${t.accent}`,
-  },
-  feedbackLabel: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: t.accent,
-    display: 'block',
-    marginBottom: '6px',
-  },
-  feedbackText: {
-    margin: 0,
-    fontSize: '13px',
-    color: t.textPrimary,
-    lineHeight: '1.5',
-  },
-  empty: {
-    textAlign: 'center',
-    padding: '48px',
-    color: t.textMuted,
-    fontSize: '13px',
-  },
-  emptyCard: {
-    textAlign: 'center',
-    padding: '60px 40px',
-    backgroundColor: t.card,
-    borderRadius: t.radius,
-    boxShadow: t.shadow,
-  },
-  emptyIcon: {
-    fontSize: '48px',
-    marginBottom: '16px',
-  },
-  emptyText: {
-    fontSize: '16px',
-    fontWeight: '500',
-    color: t.textPrimary,
-    marginBottom: '8px',
-  },
-  emptySubtext: {
-    fontSize: '13px',
-    color: t.textMuted,
-  },
+  topBar: { display:'flex', justifyContent:'space-between',
+    alignItems:'flex-start', marginBottom:'28px' },
+  title: { margin:'0 0 4px', fontSize:'22px',
+    fontWeight:'600', color:t.textPrimary },
+  subtitle: { margin:0, fontSize:'13px', color:t.textMuted },
+  addBtn: { padding:'10px 18px', backgroundColor:t.textPrimary,
+    color:'#fff', border:'none', borderRadius:t.radiusSm,
+    fontSize:'13px', fontWeight:'500', cursor:'pointer' },
+  error: { backgroundColor:t.dangerLight, color:t.danger,
+    padding:'10px 14px', borderRadius:t.radiusSm,
+    marginBottom:'16px', fontSize:'13px' },
+  successMsg: { backgroundColor:'#EDF7F2', color:'#3DAA6E',
+    padding:'10px 14px', borderRadius:t.radiusSm,
+    marginBottom:'16px', fontSize:'13px' },
+  formCard: { backgroundColor:t.card, borderRadius:t.radius,
+    padding:'24px', marginBottom:'24px', boxShadow:t.shadow },
+  formHeader: { display:'flex', justifyContent:'space-between',
+    alignItems:'center', marginBottom:'20px' },
+  formTitle: { fontSize:'15px', fontWeight:'600', color:t.textPrimary },
+  closeBtn: { background:'none', border:'none', fontSize:'16px',
+    color:t.textMuted, cursor:'pointer' },
+  formGrid: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' },
+  label: { display:'block', fontSize:'12px', fontWeight:'500',
+    color:t.textMuted, marginBottom:'6px' },
+  input: { width:'100%', padding:'10px 12px', borderRadius:t.radiusSm,
+    border:`1.5px solid ${t.border}`, fontSize:'13px',
+    boxSizing:'border-box', backgroundColor:'#fff',
+    color:t.textPrimary, outline:'none' },
+  slider: { width:'100%', marginTop:'8px', accentColor:t.accent },
+  sliderTrack: { display:'flex', justifyContent:'space-between',
+    marginTop:'4px' },
+  sliderTick: { fontSize:'11px', color:t.textLight },
+  textarea: { width:'100%', padding:'10px 12px', borderRadius:t.radiusSm,
+    border:`1.5px solid ${t.border}`, fontSize:'13px',
+    boxSizing:'border-box', fontFamily:'inherit',
+    resize:'vertical', outline:'none' },
+  formActions: { display:'flex', gap:'10px', marginTop:'20px' },
+  saveBtn: { padding:'10px 20px', backgroundColor:t.textPrimary,
+    color:'#fff', border:'none', borderRadius:t.radiusSm,
+    fontSize:'13px', fontWeight:'500', cursor:'pointer' },
+  cancelBtn: { padding:'10px 20px', backgroundColor:t.bg,
+    color:t.textMuted, border:`1px solid ${t.border}`,
+    borderRadius:t.radiusSm, fontSize:'13px', cursor:'pointer' },
+  tabRow: { display:'flex', gap:'4px', marginBottom:'16px',
+    borderBottom:`1px solid ${t.border}` },
+  tab: { padding:'8px 16px', background:'none', border:'none',
+    fontSize:'13px', color:t.textMuted, cursor:'pointer' },
+  tabActive: { color:t.accent, borderBottom:`2px solid ${t.accent}` },
+  filterRow: { display:'flex', gap:'10px', marginBottom:'20px',
+    flexWrap:'wrap' },
+  filterInput: { padding:'8px 12px', borderRadius:t.radiusSm,
+    border:`1px solid ${t.border}`, fontSize:'13px',
+    backgroundColor:'#fff', color:t.textPrimary },
+  filterBtn: { padding:'8px 14px', backgroundColor:t.textPrimary,
+    color:'#fff', border:'none', borderRadius:t.radiusSm,
+    fontSize:'13px', cursor:'pointer' },
+  clearBtn: { padding:'8px 14px', backgroundColor:'transparent',
+    color:t.textMuted, border:`1px solid ${t.border}`,
+    borderRadius:t.radiusSm, fontSize:'13px', cursor:'pointer' },
+  empty: { textAlign:'center', padding:'48px',
+    color:t.textMuted, fontSize:'13px' },
+  emptyState: { textAlign:'center', padding:'60px 40px',
+    backgroundColor:t.card, borderRadius:t.radius, boxShadow:t.shadow },
+  emptyIcon: { fontSize:'32px', color:t.textLight, marginBottom:'12px' },
+  emptyText: { fontSize:'15px', fontWeight:'500',
+    color:t.textPrimary, marginBottom:'4px' },
+  emptySubtext: { fontSize:'13px', color:t.textMuted },
+  list: { display:'flex', flexDirection:'column', gap:'12px' },
+  card: { backgroundColor:t.card, borderRadius:t.radius,
+    boxShadow:t.shadow, display:'flex', overflow:'hidden' },
+  cardLeft: { width:'64px', flexShrink:0,
+    backgroundColor:t.accentLight,
+    display:'flex', alignItems:'center', justifyContent:'center' },
+  cardDate: { textAlign:'center' },
+  cardDay: { fontSize:'20px', fontWeight:'600', color:t.accent,
+    lineHeight:1 },
+  cardMonth: { fontSize:'11px', color:t.accent, textTransform:'uppercase',
+    letterSpacing:'0.05em' },
+  cardBody: { flex:1, padding:'16px 20px' },
+  cardTop: { display:'flex', justifyContent:'space-between',
+    alignItems:'flex-start', marginBottom:'12px' },
+  cardMeta: { display:'flex', alignItems:'center', gap:'8px' },
+  horseName: { fontSize:'15px', fontWeight:'600', color:t.textPrimary },
+  dot: { color:t.textLight },
+  sessionType: { fontSize:'13px', color:t.textMuted },
+  cardActions: { display:'flex', gap:'6px' },
+  editBtn: { padding:'4px 10px', background:'none',
+    border:`1px solid ${t.border}`, borderRadius:'6px',
+    fontSize:'11px', color:t.textMuted, cursor:'pointer' },
+  deleteBtn: { padding:'4px 10px', background:'none',
+    border:`1px solid ${t.danger}`, borderRadius:'6px',
+    fontSize:'11px', color:t.danger, cursor:'pointer' },
+  feedbackBtn: { padding:'4px 10px', backgroundColor:t.accentLight,
+    border:`1px solid ${t.accent}`, borderRadius:'6px',
+    fontSize:'11px', color:t.accent, cursor:'pointer' },
+  cardStats: { display:'flex', gap:'24px', marginBottom:'12px' },
+  stat: { display:'flex', flexDirection:'column', gap:'2px' },
+  statLabel: { fontSize:'11px', color:t.textMuted,
+    textTransform:'uppercase', letterSpacing:'0.04em' },
+  statValue: { fontSize:'13px', fontWeight:'500', color:t.textPrimary },
+  intensityPill: { fontSize:'11px', padding:'2px 8px',
+    borderRadius:'999px', fontWeight:'500', width:'fit-content' },
+  notesBox: { padding:'10px 12px', backgroundColor:t.bg,
+    borderRadius:t.radiusSm, marginTop:'8px' },
+  notesLabel: { fontSize:'11px', fontWeight:'500', color:t.textMuted,
+    textTransform:'uppercase', letterSpacing:'0.04em',
+    display:'block', marginBottom:'4px' },
+  notesText: { margin:0, fontSize:'13px', color:t.textPrimary,
+    lineHeight:'1.6' },
+  feedbackBox: { padding:'10px 12px', backgroundColor:t.accentLight,
+    borderRadius:t.radiusSm, marginTop:'8px',
+    borderLeft:`3px solid ${t.accent}` },
+  feedbackLabel: { fontSize:'11px', fontWeight:'500', color:t.accent,
+    textTransform:'uppercase', letterSpacing:'0.04em',
+    display:'block', marginBottom:'4px' },
+  feedbackText: { margin:0, fontSize:'13px', color:t.textPrimary,
+    lineHeight:'1.6' },
 };
