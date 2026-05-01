@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import api from '../api/axios';
 import { tokens as t } from '../styles/tokens';
+import { useAuth } from '../context/AuthContext';
 
 const DISCIPLINES = [
   'Jumping', 'Dressage', 'Endurance', 'Racing', 'Groundwork', 'Hacking'
@@ -18,11 +19,15 @@ const disciplineColors = {
 
 const emptyForm = {
   name: '', breed: '', age: '',
-  gender: 'Male', discipline: 'Jumping', photoUrl: ''
+  gender: 'Male', discipline: 'Jumping',
+  photoUrl: '', ownerId: ''
 };
 
 export default function HorsesPage() {
+  const { user } = useAuth();
+  const isManager = user?.role === 'StableManager';
   const [horses, setHorses] = useState([]);
+  const [riders, setRiders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -30,7 +35,10 @@ export default function HorsesPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => { fetchHorses(); }, []);
+  useEffect(() => {
+    fetchHorses();
+    if (user?.role === 'StableManager') fetchRiders();
+  }, []);
 
   const fetchHorses = async () => {
     try {
@@ -41,11 +49,22 @@ export default function HorsesPage() {
     finally { setLoading(false); }
   };
 
+  const fetchRiders = async () => {
+    try {
+      const res = await api.get('/horses/riders');
+      setRiders(res.data);
+    } catch {}
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
     try {
-      const payload = { ...form, age: parseInt(form.age) };
+      const payload = {
+        ...form,
+        age: parseInt(form.age),
+        ownerId: parseInt(form.ownerId)
+      };
       if (editId) await api.put(`/horses/${editId}`, payload);
       else await api.post('/horses', payload);
       setSuccess(editId ? 'Horse updated.' : 'Horse added.');
@@ -58,7 +77,7 @@ export default function HorsesPage() {
     setForm({
       name: horse.name, breed: horse.breed, age: horse.age,
       gender: horse.gender, discipline: horse.discipline,
-      photoUrl: horse.photoUrl || ''
+      photoUrl: horse.photoUrl || '', ownerId: horse.ownerId
     });
     setEditId(horse.id);
     setShowForm(true);
@@ -84,17 +103,19 @@ export default function HorsesPage() {
             {loading ? '—' : `${horses.length} horse${horses.length !== 1 ? 's' : ''} in your stable`}
           </p>
         </div>
-        <button style={s.addBtn} onClick={() => {
-          setShowForm(true); setEditId(null); setForm(emptyForm);
-        }}>
-          + Add horse
-        </button>
+        {isManager && (
+          <button style={s.addBtn} onClick={() => {
+            setShowForm(true); setEditId(null); setForm(emptyForm);
+          }}>
+            + Add horse
+          </button>
+        )}
       </div>
 
       {error && <div style={s.error}>{error}</div>}
       {success && <div style={s.successMsg}>{success}</div>}
 
-      {showForm && (
+      {showForm && isManager && (
         <div style={s.formCard}>
           <div style={s.formHeader}>
             <div>
@@ -148,6 +169,17 @@ export default function HorsesPage() {
                   onChange={e => setForm({ ...form, discipline: e.target.value })}>
                   {DISCIPLINES.map(d => (
                     <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={s.label}>Assign to Rider</label>
+                <select style={s.input} value={form.ownerId}
+                  onChange={e => setForm({ ...form, ownerId: e.target.value })}
+                  required>
+                  <option value="">Select a rider</option>
+                  {riders.map(r => (
+                    <option key={r.id} value={r.id}>{r.fullName}</option>
                   ))}
                 </select>
               </div>
@@ -225,16 +257,18 @@ export default function HorsesPage() {
                 </div>
 
                 {/* Actions */}
-                <div style={s.cardFooter}>
-                  <button style={s.editBtn}
-                    onClick={() => handleEdit(horse)}>
-                    Edit details
-                  </button>
-                  <button style={s.deleteBtn}
-                    onClick={() => handleDelete(horse.id, horse.name)}>
-                    Delete
-                  </button>
-                </div>
+                {isManager && (
+                  <div style={s.cardFooter}>
+                    <button style={s.editBtn}
+                      onClick={() => handleEdit(horse)}>
+                      Edit details
+                    </button>
+                    <button style={s.deleteBtn}
+                      onClick={() => handleDelete(horse.id, horse.name)}>
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

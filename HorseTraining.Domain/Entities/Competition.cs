@@ -1,0 +1,14 @@
+﻿namespace HorseTraining.Domain.Entities;
+
+public class Competition
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Location { get; set; } = string.Empty;
+    public DateTime Date { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<CompetitionResult> Results { get; set; } = new List<CompetitionResult>();
+}

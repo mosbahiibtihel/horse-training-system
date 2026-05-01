@@ -1,3 +1,4 @@
+ /*This stores the logged-in user globally so any component can access it. */
 
 import { createContext, useContext, useState } from 'react';
 
@@ -28,4 +29,5 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

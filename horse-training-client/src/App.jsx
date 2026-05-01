@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import PrivateRoute from './components/PrivateRoute';
 import HorsesPage from './pages/HorsesPage';
 import TrainingSessionsPage from './pages/TrainingSessionsPage';
+import CompetitionsPage from './pages/CompetitionsPage';
 export default function App() {
   return (
     <AuthProvider>
@@ -23,7 +24,9 @@ export default function App() {
   <Route path="/sessions" element={
   <PrivateRoute><TrainingSessionsPage /></PrivateRoute>
 } />
-
+<Route path="/competitions" element={
+  <PrivateRoute><CompetitionsPage /></PrivateRoute>
+} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

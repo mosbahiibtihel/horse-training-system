@@ -10,7 +10,8 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Horse> Horses => Set<Horse>();
     public DbSet<TrainingSession> TrainingSessions => Set<TrainingSession>();
-
+    public DbSet<Competition> Competitions => Set<Competition>();
+    public DbSet<CompetitionResult> CompetitionResults => Set<CompetitionResult>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -44,5 +45,23 @@ public class AppDbContext : DbContext
                   .HasForeignKey(t => t.RiderId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
+        modelBuilder.Entity<CompetitionResult>(entity =>
+        {
+            entity.HasOne(r => r.Competition)
+                  .WithMany(c => c.Results)
+                  .HasForeignKey(r => r.CompetitionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.Horse)
+                  .WithMany()
+                  .HasForeignKey(r => r.HorseId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Rider)
+                  .WithMany()
+                  .HasForeignKey(r => r.RiderId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
     }
+
 }

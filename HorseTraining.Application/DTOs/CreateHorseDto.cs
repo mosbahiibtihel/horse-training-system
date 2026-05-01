@@ -8,4 +8,5 @@ public class CreateHorseDto
     public string Gender { get; set; } = string.Empty;
     public string Discipline { get; set; } = string.Empty;
     public string? PhotoUrl { get; set; }
+    public int OwnerId { get; set; }
 }

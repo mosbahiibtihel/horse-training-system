@@ -4,11 +4,12 @@ import { tokens as t } from '../styles/tokens';
 // eslint-disable-next-line no-unused-vars
 import { useNotifications } from '../hooks/useNotifications';
 import NotificationBell from './NotificationBell';
-const navItems = [
-  { path: '/dashboard', icon: '▤', label: 'Dashboard' },
-  { path: '/horses', icon: '◈', label: 'Horses' },
-  { path: '/sessions', icon: '◉', label: 'Sessions' },
-  { path: '/competitions', icon: '◆', label: 'Competitions' },
+const allNavItems = [
+  { path: '/dashboard', icon: '▤', label: 'Dashboard', roles: ['Rider','Trainer','StableManager'] },
+  { path: '/horses', icon: '◈', label: 'Horses', roles: ['Rider','Trainer','StableManager'] },
+  { path: '/sessions', icon: '◉', label: 'Sessions', roles: ['Rider','Trainer'] },
+  { path: '/competitions', icon: '◆', label: 'Competitions', roles: ['Rider','Trainer','StableManager'] },
+  { path: '/ai-coach', icon: '✦', label: 'AI Coach', roles: ['Rider','Trainer'] },
 ];
 
 export default function Layout({ children }) {
@@ -16,8 +17,12 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const navItems = allNavItems.filter(item =>
+    item.roles.includes(user?.role)
+  );
+
   const handleLogout = () => { logout(); navigate('/login'); };
-const { notifications, unreadCount, markAllRead } = useNotifications();
+  const { notifications, unreadCount, markAllRead } = useNotifications();
   return (
     <div style={s.shell}>
       <aside style={s.sidebar}>

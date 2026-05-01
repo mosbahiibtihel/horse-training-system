@@ -139,6 +139,9 @@ public class TrainingSessionsController : ControllerBase
     [HttpPost("{id}/feedback")]
     public async Task<IActionResult> AddFeedback(int id, AddFeedbackDto dto)
     {
+        var trainerId = int.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
         var session = await _context.TrainingSessions
             .Include(s => s.Horse)
             .FirstOrDefaultAsync(s => s.Id == id);
@@ -148,12 +151,16 @@ public class TrainingSessionsController : ControllerBase
         session.TrainerFeedback = dto.TrainerFeedback;
         await _context.SaveChangesAsync();
 
-        // Fire real-time notification to the rider
-        await _notificationService.SendToUser(
-            session.RiderId.ToString(),
-            "feedback",
-            $"Your trainer left feedback on {session.Horse.Name}'s {session.SessionType} session."
-        );
+        // Only notify the rider — never the trainer who added feedback
+        if (session.RiderId != trainerId)
+        {
+            await _notificationService.SendToUser(
+                session.RiderId.ToString(),
+                "feedback",
+                $"Your trainer left feedback on {session.Horse.Name}'s " +
+                $"{session.SessionType} session."
+            );
+        }
 
         return NoContent();
     }

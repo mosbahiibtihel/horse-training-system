@@ -6,6 +6,8 @@ public class DashboardAnalyticsDto
     public int TotalSessions { get; set; }
     public int SessionsThisWeek { get; set; }
     public double AverageIntensity { get; set; }
+    public string SummaryLabel { get; set; } = string.Empty;
+
     public List<WeeklySessionDto> WeeklySessions { get; set; } = new();
     public List<SessionTypeBreakdownDto> SessionTypeBreakdown { get; set; } = new();
     public List<IntensityTrendDto> IntensityTrend { get; set; } = new();
@@ -46,5 +48,5 @@ public class RecommendationDto
     public string Type { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string HorseName { get; set; } = string.Empty;
-}
 
+}

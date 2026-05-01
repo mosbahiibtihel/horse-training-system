@@ -26,6 +26,12 @@ const chartDefaults = {
   maintainAspectRatio: false,
 };
 
+const roleGreeting = {
+  Rider: 'Your training overview',
+  Trainer: 'Your stable overview — all riders',
+  StableManager: 'Full stable analytics',
+};
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
@@ -82,17 +88,42 @@ export default function DashboardPage() {
     }]
   };
 
-  const statCards = [
-    { label: 'Horses', value: data?.totalHorses ?? '—',
-      icon: '◈', color: t.accent },
-    { label: 'Total sessions', value: data?.totalSessions ?? '—',
-      icon: '◉', color: '#6C8EBF' },
-    { label: 'This week', value: data?.sessionsThisWeek ?? '—',
-      icon: '▤', color: '#A8C5A0' },
-    { label: 'Avg intensity', value: data?.averageIntensity
-        ? `${data.averageIntensity}/10` : '—',
-      icon: '▲', color: '#C9A0C5' },
-  ];
+ const isRider = user?.role === 'Rider';
+const isTrainer = user?.role === 'Trainer';
+// eslint-disable-next-line no-unused-vars
+const isManager = user?.role === 'StableManager';
+
+const statCards = isRider ? [
+  { label: 'My horses', value: data?.totalHorses ?? '—',
+    icon: '◈', color: t.accent },
+  { label: 'My sessions', value: data?.totalSessions ?? '—',
+    icon: '◉', color: '#6C8EBF' },
+  { label: 'This week', value: data?.sessionsThisWeek ?? '—',
+    icon: '▤', color: '#A8C5A0' },
+  { label: 'Avg intensity', value: data?.averageIntensity
+      ? `${data.averageIntensity}/10` : '—',
+    icon: '▲', color: '#C9A0C5' },
+] : isTrainer ? [
+  { label: 'Total horses', value: data?.totalHorses ?? '—',
+    icon: '◈', color: t.accent },
+  { label: 'All sessions', value: data?.totalSessions ?? '—',
+    icon: '◉', color: '#6C8EBF' },
+  { label: 'Sessions this week', value: data?.sessionsThisWeek ?? '—',
+    icon: '▤', color: '#A8C5A0' },
+  { label: 'Avg intensity', value: data?.averageIntensity
+      ? `${data.averageIntensity}/10` : '—',
+    icon: '▲', color: '#C9A0C5' },
+] : [
+  { label: 'Stable horses', value: data?.totalHorses ?? '—',
+    icon: '◈', color: t.accent },
+  { label: 'Total sessions', value: data?.totalSessions ?? '—',
+    icon: '◉', color: '#6C8EBF' },
+  { label: 'Active this week', value: data?.sessionsThisWeek ?? '—',
+    icon: '▤', color: '#A8C5A0' },
+  { label: 'Stable avg intensity', value: data?.averageIntensity
+      ? `${data.averageIntensity}/10` : '—',
+    icon: '▲', color: '#C9A0C5' },
+];
 
   return (
     <Layout>
@@ -102,7 +133,7 @@ export default function DashboardPage() {
             Good morning, {user?.fullName?.split(' ')[0]} 👋
           </h1>
           <p style={s.subtitle}>
-            Here's your training overview for today.
+            {roleGreeting[user?.role] || 'Overview'} · Today
           </p>
         </div>
         <div style={s.roleBadge}>{user?.role}</div>

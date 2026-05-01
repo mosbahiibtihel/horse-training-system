@@ -25,8 +25,19 @@ public class HorsesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var horses = await _context.Horses
+        var userId = int.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+        var query = _context.Horses
             .Include(h => h.Owner)
+            .AsQueryable();
+
+        // Riders only see their own horses
+        if (userRole == "Rider")
+            query = query.Where(h => h.OwnerId == userId);
+
+        var horses = await query
             .Select(h => new HorseDto
             {
                 Id = h.Id,
@@ -71,7 +82,17 @@ public class HorsesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(CreateHorseDto dto)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+        // Only Stable Manager can create horses
+        if (userRole != "StableManager")
+            return Forbid();
+
+        var owner = await _context.Users.FindAsync(dto.OwnerId);
+        if (owner == null)
+            return BadRequest("Selected rider does not exist.");
+        if (owner.Role != UserRole.Rider)
+            return BadRequest("Selected owner must be a rider.");
 
         var horse = new Horse
         {
@@ -81,72 +102,65 @@ public class HorsesController : ControllerBase
             Gender = dto.Gender,
             Discipline = Enum.Parse<Discipline>(dto.Discipline),
             PhotoUrl = dto.PhotoUrl,
-            OwnerId = userId
+            OwnerId = dto.OwnerId
         };
 
         _context.Horses.Add(horse);
         await _context.SaveChangesAsync();
-
-        return Ok(new { id = horse.Id, message = "Horse created successfully" });
+        return Ok(horse.Id);
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, CreateHorseDto dto)
     {
-        // Get the horse from database
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        if (userRole != "StableManager")
+            return Forbid();
+
         var horse = await _context.Horses.FindAsync(id);
+        if (horse == null) return NotFound();
 
-        if (horse == null)
-            return NotFound(new { message = "Horse not found" });
+        var owner = await _context.Users.FindAsync(dto.OwnerId);
+        if (owner == null)
+            return BadRequest("Selected rider does not exist.");
+        if (owner.Role != UserRole.Rider)
+            return BadRequest("Selected owner must be a rider.");
 
-        // Verify the current user owns this horse
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        if (horse.OwnerId != userId)
-            return Forbid(); // User doesn't own this horse
-
-        // Update the horse properties
         horse.Name = dto.Name;
         horse.Breed = dto.Breed;
         horse.Age = dto.Age;
         horse.Gender = dto.Gender;
         horse.Discipline = Enum.Parse<Discipline>(dto.Discipline);
         horse.PhotoUrl = dto.PhotoUrl;
+        horse.OwnerId = dto.OwnerId;
 
-        try
-        {
-            await _context.SaveChangesAsync();
-            return Ok(new { message = "Horse updated successfully", id = horse.Id });
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return StatusCode(500, new { message = "Error updating horse" });
-        }
+        await _context.SaveChangesAsync();
+        return NoContent();
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        // Get the horse from database
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        if (userRole != "StableManager")
+            return Forbid();
+
         var horse = await _context.Horses.FindAsync(id);
+        if (horse == null) return NotFound();
 
-        if (horse == null)
-            return NotFound(new { message = "Horse not found" });
+        _context.Horses.Remove(horse);
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
 
-        // Verify the current user owns this horse
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        if (horse.OwnerId != userId)
-            return Forbid(); // User doesn't own this horse
-
-        try
-        {
-            _context.Horses.Remove(horse);
-            await _context.SaveChangesAsync();
-            return Ok(new { message = "Horse deleted successfully" });
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, new { message = "Error deleting horse" });
-        }
+    [HttpGet("riders")]
+    public async Task<IActionResult> GetRiders()
+    {
+        var riders = await _context.Users
+            .Where(u => u.Role == UserRole.Rider)
+            .Select(u => new { u.Id, u.FullName, u.Email })
+            .ToListAsync();
+        return Ok(riders);
     }
 
     [HttpGet("test")]

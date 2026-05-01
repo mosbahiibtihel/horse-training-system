@@ -282,7 +282,7 @@ export default function TrainingSessionsPage() {
                     <span style={s.sessionType}>{session.sessionType}</span>
                   </div>
                   <div style={s.cardActions}>
-                    {user?.role === 'Rider' && (
+                      {user?.role === 'Rider' && (
                       <>
                         <button style={s.editBtn}
                           onClick={() => handleEdit(session)}>Edit</button>
@@ -295,6 +295,9 @@ export default function TrainingSessionsPage() {
                         onClick={() => handleFeedback(session.id)}>
                         Add feedback
                       </button>
+                    )}
+                    {user?.role === 'Trainer' && session.hasFeedback && (
+                      <span style={s.feedbackDone}>✓ Feedback given</span>
                     )}
                   </div>
                 </div>
@@ -438,6 +441,9 @@ const s = {
   feedbackBtn: { padding:'4px 10px', backgroundColor:t.accentLight,
     border:`1px solid ${t.accent}`, borderRadius:'6px',
     fontSize:'11px', color:t.accent, cursor:'pointer' },
+  feedbackDone: {
+    fontSize:'11px', color:'#3DAA6E', padding:'4px 8px'
+  },
   cardStats: { display:'flex', gap:'24px', marginBottom:'12px' },
   stat: { display:'flex', flexDirection:'column', gap:'2px' },
   statLabel: { fontSize:'11px', color:t.textMuted,

@@ -29,20 +29,24 @@ public class AnalyticsController : ControllerBase
         var now = DateTime.UtcNow;
         var weekStart = now.AddDays(-(int)now.DayOfWeek);
 
-        // Base query — riders see only their data
+        // Base queries
         var sessionsQuery = _context.TrainingSessions
             .Include(s => s.Horse)
             .AsQueryable();
 
+        var horsesQuery = _context.Horses.AsQueryable();
+
+        // Rider sees only their own data
+        // Trainer and StableManager see everything
         if (userRole == "Rider")
-            sessionsQuery = sessionsQuery.Where(s => s.RiderId == userId);
+        {
+            sessionsQuery = sessionsQuery
+                .Where(s => s.RiderId == userId);
+            horsesQuery = horsesQuery
+                .Where(h => h.OwnerId == userId);
+        }
 
         var sessions = await sessionsQuery.ToListAsync();
-
-        var horsesQuery = _context.Horses.AsQueryable();
-        if (userRole == "Rider")
-            horsesQuery = horsesQuery.Where(h => h.OwnerId == userId);
-
         var horses = await horsesQuery.ToListAsync();
 
         // Weekly sessions — last 6 weeks
@@ -100,11 +104,6 @@ public class AnalyticsController : ControllerBase
             var recentSessions = horseSessions
                 .Where(s => s.Date >= now.AddDays(-30))
                 .ToList();
-
-            // Fitness formula:
-            // frequency score (0-40): sessions per month, max 12
-            // intensity score (0-30): average intensity normalized
-            // consistency score (0-30): sessions spread across weeks
 
             var frequencyScore = Math.Min(40,
                 (int)(recentSessions.Count / 12.0 * 40));
@@ -201,6 +200,15 @@ public class AnalyticsController : ControllerBase
             }
         }
 
+        // Role-specific summary label
+        var summaryLabel = userRole switch
+        {
+            "Rider" => "Your personal training data",
+            "Trainer" => "All riders across the stable",
+            "StableManager" => "Full stable overview",
+            _ => "Overview"
+        };
+
         return Ok(new DashboardAnalyticsDto
         {
             TotalHorses = horses.Count,
@@ -211,6 +219,7 @@ public class AnalyticsController : ControllerBase
                 ? Math.Round(sessions.Average(s => s.Intensity), 1) : 0,
             WeeklySessions = weeklySessions,
             SessionTypeBreakdown = typeBreakdown,
+            SummaryLabel = summaryLabel,
             IntensityTrend = intensityTrend,
             HorseFitnessScores = horseFitness,
             Recommendations = recommendations
